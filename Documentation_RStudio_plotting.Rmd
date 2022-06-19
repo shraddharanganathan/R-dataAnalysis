@@ -1,0 +1,519 @@
+---
+title: "Impact of COVID-19 on Mobility in the Netherlands"
+ 
+output:
+  html_document:
+    df_print: paged
+    toc: true
+    number_section: true
+---
+
+
+![](THD.jpg)
+
+
+As submitted by 
+
+Shraddha Ranganathan
+
+Matriculation number: 00817274
+
+Email: shraddha.ranganathan@stud.th-deg.de  
+
+
+In partial fulfilment of the requirements for the course 
+
+LSI-11 Data Visualization 
+
+for the study programme 
+
+M.Sc Life Science Informatics
+
+# Overview
+
+This analysis uses Apple’s COVID-19 mobility data to analyze the impact of a global pandemic on mobility, using the Netherlands as a case study. It leverages statistical methods to gain insights on regions with interesting mobility levels, and speculates on the implications of this for a company wishing to introduce new products or adapt existing ones, for the sports market in the Netherlands. This report shows that the variance in the regions within the Netherlands may be used to customize the products and services by province to optimize results.
+
+Keywords: walking, driving, Netherlands, COVID-19
+
+# Introduction
+
+The Sars-CoV pandemic of 2019 was a key factor in changing many facets of daily life. In many parts of the world, lockdowns were introduced, which meant that people worked from home for several months. This restriction of mobility also reflected in the way people spent their time and money - as consumers were forced to spend more time indoors, more in-person activities transitioned into online ones.
+
+Under the highly visible impact of a global health crisis, it is also understandable that health concerns rose steeply. A Google Trends search of the keyword ‘home workout’ shows a sharp rise in the global interest in exercising when gyms were no longer open (March 2020). Interestingly, interest in the keyword ‘Fitbit’ dropped sharply at the same time. April of 2020 also saw an increased interest in healthy eating, with keywords such as ‘healthy recipes’, ‘keto’, and ‘calorie’ showing an increase on Google Trends (Appendix 1). These observations lead to the conclusion that global interest in general health and wellbeing has risen in the time of the COVID-19 pandemic. These data may be of interest to businesses that are centered on health, fitness, sports, and well-being.
+
+# Problem Definition 
+
+The global interest in health, particularly through exercise, has been rising steadily since 2004, often seeing spikes when new research becomes integrated into popular culture. The trend of interest over one year’s time is similar every year, but the total interest rises incrementally (Appendix 1b). Under standard circumstances, these trends may be seen as constant, and integrated statically into product development, sales, and marketing plans. However, in the face of an extended period of changed behavior, these factors must be seen as dynamic. The sudden and swift changes in consumer behavior and interests must be considered for businesses attempting to optimize their projections.
+
+It may also be taken as fact that to best optimize these projections, the data used must also be highly relevant to the outcome (sales, revenue, interest in product, etc.) The problem to be targeted is filtering out the unnecessary data and focusing on the data that may have an impact on consumer behavior in the sports market.
+
+
+# Objectives 
+
+Objectives of this analysis are as follows:
+
+1. Examining one subset of global mobility data as a case study of the relevance of the data.
+2. Examining total mobility in the subset, as well as the regions contained within that subset.
+3. Comparing regional data and deriving insights relevant to the client’s requirements.
+
+# Methods
+
+This analysis uses data from the Apple Mobility Trends Report [1]. This dataset consists of mobility (in the form of walking, use of public transit and driving) from 63 countries and 295 major cities globally. This data is leveraged using the following methods:
+
+1. The chosen subset (the Netherlands) is separated into total data and regional data.
+2. The data is described using descriptive statistics.
+3. Total mobility in the Netherlands is examined - insights gained from this examination are further analyzed in following sections.
+4. Regional data is examined, and insights gained are compared for various regions.
+
+Methods 3 and 4 are performed using base R and ggplot2.
+
+# Results
+
+This section applies the methods described above, to the data sets for total mobility in the Netherlands, and data about regional mobility in the Netherlands. The plots are briefly interpreted and explained here, and more details and insights are offered in section 6.
+
+## Pre-processing 
+
+### Loading the necessary libraries
+
+```{r include=FALSE}
+library(tidyverse) #Contains ggplot2 and dplyr
+library(RColorBrewer) #To use a greater range of palettes
+library(plotly) #For interactive plots
+library(viridis) #To generate palettes for colorblind readers
+library(ggridges) #To generate ridge plots
+```
+
+### Preparing the dataset
+
+#### Examining the total dataset.
+
+```{r include=FALSE}
+mob <- read.csv("applemobilitytrends-2021-07-01.csv", header = TRUE, colClasses=c("country" = "factor", "region"="character", "sub.region"="character", "alternative_name"="character", "transportation_type"="factor"), stringsAsFactors = FALSE)
+```
+
+Getting information about the dataset mob. 
+
+```{r echo=FALSE}
+head(mob)
+```
+We see global data, describing the type of geographical region, the name of the region, transportation type, alternative names of the region, sub-regions, country names, and all dates as individual columns. To evaluate how many countries and cities are available in this data set: 
+
+```{r include=FALSE}
+countries <- filter(mob, geo_type == "country/region")
+cities <- filter(mob, geo_type == "city")
+```
+
+```{r echo=TRUE}
+length(unique(countries$region))
+length(unique(cities$region))
+```
+
+There are 63 unique countries and 295 unique cities. 
+
+We can also use the str method to gain a high-level overview about all the columns in this dataframe.  
+```{r echo=FALSE}
+str(mob[,0:10])
+```
+
+We set geo_type, region, sub-region etc. to be read as characters. Transportation type and country are read as factors. All values for mobility are numerical. We can also check the levels for the feature transportation_type: 
+
+```{r}
+levels(mob$transportation_type)
+```
+There are 3 levels to examine. 
+
+This report will be based on 2 subsets of this total data: mobility for the Netherlands (total), and mobility for the regions/provinces in the Netherlands. Thus we must modify the dataset to grab only relevant information. 
+
+#### Modification of the dataset
+
+Columns labeled X2020.{}.{} indicate the mobility measurement on that day. These columns will be more difficult to work with, as compared to having each date as a row header. We therefore change the dataset from a wide format to a long one. 
+
+```{r echo=FALSE}
+mobility <- pivot_longer(mob, 7:542, names_to = "date", values_to = "mobility")
+head(mobility)
+```
+To make use of the dates, we remove the 'X' preceding all the values in the date column and reformat the date column as date type. 
+
+```{r include=FALSE}
+mobility$date <- gsub("X", "", mobility$date)
+mobility$date <- as.Date(mobility$date, "%Y.%m.%d")
+```
+
+
+#### Datasets of interest
+
+This analysis aims to explore the mobility trends in the Netherlands from two perspectives: 
+1) Change in mobility as the Covid-19 pandemic progressed
+2) Comparison of regions within the Netherlands
+
+```{r}
+NL_total <- filter(mobility, region == "Netherlands")
+NL_regional <- filter(mobility, country == "Netherlands")
+```
+
+Identifying regions in the NL_regional dataset. 
+```{r echo=FALSE}
+unique(NL_regional$region)
+unique(NL_regional$sub.region)
+```
+
+We have specified that NL_total only consists of values for the Netherlands. Therefore, only the columns with varying data need to be maintained. Similarly NL_regional can also be scrubbed of repetitive columns.  
+
+```{r include=FALSE}
+NL_total <- subset(NL_total, select=c(transportation_type, date, mobility))
+NL_regional <- subset(NL_regional, select=c(region, transportation_type, date, mobility))
+```
+
+```{r echo=TRUE}
+typeof(NL_regional)
+typeof(NL_total)
+```
+
+The subsets NL_total and NL_regional have been saved as lists. These are now converted into dataframes. 
+```{r include=FALSE}
+as.data.frame(NL_regional)
+as.data.frame(NL_total)
+```
+
+## Basic data analysis
+
+### Descriptive statistics
+
+We begin with a quick summary of the dataframes of interest.
+
+```{r echo=FALSE}
+summary(NL_total)
+```
+
+There are 536 days worth of values. The maximum mobility seen was 173.30, and the  minimum was 17.62. 
+
+```{r echo=FALSE}
+NL_regional$region <- as.factor(NL_regional$region) #further modification of the dataset for optimal use
+NL_regional$date <- as.Date(NL_regional$date, "%Y-%m-%d")
+summary(NL_regional)
+```
+
+The regions all contain the same number of values. There are fewer values for transit - some regions do not have transit data. The maximum mobility is higher than in the total data - likely an outlier. 
+
+As a first check, we begin by examining the distribution of the data. Ideally, it will be normally distributed.
+
+```{r echo=FALSE}
+ggplot(NL_total, aes(x=mobility)) + 
+  geom_histogram(binwidth = 10, fill = "orangered1", color="white") + 
+  ggtitle("Distribution of mobility in the Netherlands")
+```
+
+
+```{r echo=FALSE}
+qqnorm(NL_total$mobility)
+qqline(NL_total$mobility)
+```
+
+Figures 1 and 2 shows that the data is distributed normally. We can proceed with the analysis using normal distributions as our baseline. The slight spike at 50% mobility may be attributed to the unusual circumstances surrounding COVID-19 related lockdowns. 
+
+
+### Overview of the total data
+
+The change in behavior over time can be viewed at a high level using a series of box plots. In particular, the median values will be useful to see the trends over the pandemic, particularly highlighting outliers. 
+
+```{r echo=FALSE}
+bp <- ggplot(NL_total) + 
+  geom_boxplot(aes(y=mobility, 
+                   x=reorder(format(date, '%B %Y'), date)),
+               fill = "orangered1", alpha = 0.8, color="black") +
+  xlab('Time in months') +
+  ylab('Mobility measured') + 
+  theme_gray() + 
+  theme(axis.text.x = element_text(angle=45, hjust=1)) + 
+  ggtitle("Change in mobility over time - Netherlands")
+
+ggplotly(bp)
+
+```
+
+As seen in figure 3, the median value of mobility dropped sharply in March 2020 and rose back to pre-pandemic levels by July 2020. Another drop was seen in October 2020.
+The data set includes groupings of values by type of transportation. The use of the various transportation methods can be summarized using a stacked bar plot.
+
+```{r echo=FALSE}
+perc <- ggplot(NL_total, aes(fill=transportation_type, y=mobility, x="")) + 
+  geom_bar(position = "fill", stat = "identity", width=0.2, alpha=0.8) + 
+  scale_fill_discrete(name = "Transportation type") +
+  theme_minimal() +
+  ylab("Percentage occupied  by a transportation type") + 
+  xlab("") + 
+  coord_flip()
+
+perc
+```
+
+This data may now be combined to view the changes in mobility over time, as described by the various transportation methods. 
+
+```{r  fig.align="center", echo=FALSE, fig.width=10}
+NL_total$date <- as.Date(NL_total$date, "%Y.%m.%d")
+total <- ggplot(data = NL_total, 
+       aes(x=date, y=mobility, fill=transportation_type)) + 
+  geom_area(aes(color=transportation_type), alpha=0.5, lwd=0.75) + 
+  labs(x = "Time in months", y = "Mobility measured") + 
+  scale_x_date(date_breaks = '1 month') + 
+  theme(axis.text.x = element_text(angle=45, hjust=1)) + 
+  labs(fill="Transportation type") + 
+  ggtitle("Change in mobility over time by transportation method")
+
+ggplotly(total)
+```
+
+
+We observe a sharp drop in all modes of transportation in mid-March, 2020, and a lesser one in early/mid-October 2020. Public transport (‘transit’) takes the greatest hit, and does not recover to its original values. On the other hand, walking and driving both increased at approximately the same rate. The total amount of walking and driving increased back to ‘pre-pandemic’ levels in July 2020, and drop again in October 2020. By June of 2021, both have reached approximately the same levels as pre-pandemic figures. Transit has not yet achieved this.
+
+
+### Overview of regional data
+
+It is also interesting to compare all the regions within the Netherlands to see how they differed in their reaction to the lockdowns in terms of mobility.  
+
+```{r echo=FALSE, fig.height=7}
+ggplot(NL_regional, aes(x=mobility, y=region, fill=mobility)) + 
+  geom_density_ridges(aes(color="white", fill=region)) + 
+  theme_ridges() + 
+  theme(legend.position = "none") + 
+  xlab("Mobility") + 
+  ylab("Region") + 
+  ggtitle("Comparison of mobility between regions in the Netherlands")
+```
+
+Several discrepancies between mobility behaviors may immediately be noted; for example, Zeeland shows a much flatter distribution as compared to North Holland, for example. Regions with flatter distributions are likely to be higher mobility regions. 
+
+To further evaluate this, we can now compare the mobility trends in the different regions over time. Considering the number of variables to be examined here, a heat map is called for compressed visualization.
+
+```{r  fig.align="center", echo=FALSE, fig.width=14}
+
+hm <- ggplot(NL_regional, aes(x=region, date)) + 
+  geom_tile(aes(fill=mobility)) + 
+  scale_fill_continuous(type = "viridis") + 
+  theme_gray() + 
+  theme(axis.text.x = element_text(angle=45, hjust=1)) + 
+  scale_y_date(date_breaks = '1 month') + 
+  ylab("Time in months") + 
+  ggtitle("Compressed mobility trends in regions within Netherlands")
+
+hm
+```
+Observations:
+
+It is seen that until the point of interest in March 2020, all the regions had similar trends. All regions recovered mobility around July, except for North Holland and Amsterdam, which remained low. Another reduction is seen around October 2020, except in Drenthe, Friesland, and Zeeland.
+(Note: Amsterdam lies within the province of North Holland, therefore trends seen are very similar.) 
+
+The Amsterdam region remains consistently low until the end of the available data, reverting to pre-pandemic figures in May 2021. The Zeeland, Drenthe and Friesland regions increased its mobility even more than before drop in March 2020. Minimal fluctuations were seen in the Overijssel region. From these plots, we can identify that: 
+1. An interesting event occurred around 15th March 2020 and 15th October 2020. This can be crosschecked against the news from those days. 
+2. The Amsterdam region is of interest for reduced mobility. 
+3. The Overijssel region remained mostly stable, despite the changes in laws and restrictions. 
+4. The Zeeland, Friesland and Drenthe regions are of interest for increased mobility. 
+
+
+## Further exploration 
+
+### Events of interest 
+
+By crosschecking on the government website, it was seen that 15th March 2020 was the day that the first set of lockdowns were introduced in the Netherlands [2]. Schools, universities, sports clubs, gyms, saunas and coffee shops were also to be closed from this date onwards. It is highly likely that this was a major reason for the sharp decline in mobility. A second, partial lockdown was announced on 13th October, 2020 [3].
+
+### Region of most reduced mobility
+
+
+Visualizing the trends in Amsterdam may provide important insights about reduced mobility areas; we begin with a high-level overview.   
+
+```{r echo=FALSE}
+ams <- filter(NL_regional, region == "Amsterdam")
+
+trend_ams <- ggplot(ams, aes(x=date, y=transportation_type, size=mobility, color=mobility)) + 
+  geom_point(alpha=0.1) + 
+  scale_size(range=c(.1,24), name="Mobility") + 
+  scale_x_date(date_breaks ='1 month') +
+  ylab("Transportation type") + 
+  xlab("Time in months") +
+  theme(axis.text.x = element_text(angle=45, hjust=1)) + 
+  ggtitle("Comparison of transportation types in Amsterdam")
+
+ggplotly(trend_ams)
+```
+
+
+We note that transit was affected strongly, and walking moderately, during both lockdowns. It is interesting to examine the trends of driving in the Amsterdam region.
+
+```{r echo=FALSE}
+ams_data <- ggplot(ams, aes(x=date, y=mobility, group=transportation_type)) + 
+  geom_point(aes(color=transportation_type, alpha=mobility)) + 
+  theme(axis.text.x = element_text(angle=45, hjust=1)) + 
+  scale_x_date(date_breaks = '1 month') + 
+  xlab("Time in months") + 
+  ylab("Mobility") + 
+  ggtitle("Mobility trends in Amsterdam: Driving vs. walking or transit") + 
+  labs(color="Transportation types")
+
+ggplotly(ams_data)
+```
+
+We note from this plot that the trend of driving recovered quickly after the first lockdown and remained high in Amsterdam. It is seen to be preferred over both walking and transit. It is useful to check these distributions to spot any discrepancies.  
+
+```{r echo=FALSE}
+amsr <- ggplot(ams, aes(x=mobility, y=transportation_type, fill=transportation_type)) + 
+  geom_density_ridges(alpha=0.5) + 
+  theme_ridges() + 
+  theme(legend.position="none") + 
+  xlab("Mobility") + 
+  ylab("Transportation type") + 
+  ggtitle("Distribution of different transportation methods in Amsterdam")
+
+amsr
+```
+
+
+The ridge plot confirms that driving is maintained as a stable form of transport in Amsterdam.
+
+
+### Regions showing relative stability
+
+
+The Overijssel region did not appear to show much fluctuation in mobility. This may be examined by viewing the shape of mobility over time in this province. 
+
+
+```{r echo=FALSE}
+ov <- filter(NL_regional, region=="Overijssel")
+```
+```{r}
+ov_trends <- ggplot(ov, aes(x=date, y=transportation_type, size=mobility, color=mobility)) + 
+  geom_point(alpha=0.1) + 
+  scale_size(range=c(.1,24), name="Mobility") + 
+  scale_x_date(date_breaks ='1 month') +
+  ylab("Transportation type") + 
+  xlab("Time in months") +
+  theme(axis.text.x = element_text(angle=45, hjust=1)) + 
+  ggtitle("Comparison of transportation types in Overijssel")
+
+ggplotly(ov_trends)
+```
+
+
+Like national trends, Overijssel also saw the greatest reduction in the use of public transport around March 2020, as seen in figure 10. Driving and walking also reduced to some extent but recovered more quickly than transit did. We can further visualize the trends in walking (compared to other methods), which appears to be the least affected group.
+
+
+```{r echo=FALSE, fig.width=10}
+ov_data <- ggplot(ov, aes(x=date, y=mobility, group=transportation_type)) + 
+  geom_point(aes(color=transportation_type, alpha=mobility)) + 
+  theme(axis.text.x = element_text(angle=45, hjust=1)) + 
+  scale_x_date(date_breaks = '1 month') + 
+  xlab("Time in months") + 
+  ylab("Mobility") + 
+  ggtitle("Mobility trends in Overijssel: Walking vs. driving or transit") +
+  labs(color="Transportation type")
+
+ggplotly(ov_data)
+```
+
+
+Not only did walking quickly regain its high numbers in Overijssel, but it also exceeded them by June 2020. Walking also remains high until the end of the given time-period, as per figure 11. In comparison, driving exceeds pre-pandemic figures in around August, which drops off around October 2020, and then flattens out. Transit does not recover to pre-pandemic levels until the end of the given data.
+
+
+```{r echo=FALSE}
+ovr <- ggplot(ov, aes(x=mobility, y=transportation_type, fill=transportation_type)) + 
+  geom_density_ridges(alpha=0.5) + 
+  theme_ridges() + 
+  theme(legend.position="none") + 
+  xlab("Mobility") + 
+  ylab("Transportation type") + 
+  ggtitle("Distribution of different transportation methods in Overijssel")
+
+ovr
+```
+
+The distribution in Overijssel shows that walking is strongly favored. Compiling this insight with those from the previous plots, we can infer that consumers who favor walking should be the target group in this area.
+
+
+### Regions of highest mobility
+
+
+Three regions were seen to maintain high mobility after the lockdowns were announced. Comparing these may provide interesting insights. Note: the dataset contained no information on public transit for these regions.
+
+```{r include=FALSE}
+high_mob <- filter(NL_regional, region == "Zeeland" | region == "Friesland" | region =="Drenthe")
+```
+```{r include=FALSE}
+tr <- filter(NL_regional, transportation_type=="transit" & region == "Friesland")
+tr
+```
+
+Note: The regions Drenthe, Friesland and Zeeland do not have data on public transit. 
+
+```{r echo=FALSE, fig.width=10}
+comp <- ggplot(high_mob, aes(x=date, y=mobility, group=transportation_type)) + 
+  geom_line(aes(color=transportation_type), lwd=0.3) + 
+  facet_grid(transportation_type ~ region, scale="free_y") +
+  scale_x_date(date_breaks = '2 month') +
+  theme(axis.text.x = element_text(angle=45, hjust=1)) + 
+  xlab("Time in months") + 
+  ylab("Mobility") + 
+  ggtitle("Comparison of transportation methods in Drenthe, Friesland and Zeeland")
+```
+
+```{r fig.align='center', echo=FALSE, fig.width=14}
+comp
+```
+
+This plot shows that mobility fell to lower amounts in Zeeland (<50), but overall, it shows greater mobility than both Drenthe and Friesland. This is true for both walking and driving. All three regions have greater mobility through walking than driving. 
+
+
+### Comparison of highly varied regions
+
+
+As a check, we may compare the differences in walking data between Amsterdam, the high mobility regions (Drenthe, Friesland & Zeeland), and Overijssel. This visualization can help to elucidate whether the variance is sufficiently big to base decisions upon.
+
+
+```{r echo=FALSE, fig.width=14}
+comp2 <- filter(NL_regional, (region == "Amsterdam" | region == "Drenthe" | region == "Friesland" | region == "Zeeland" | region == "Overijssel") & transportation_type == "walking") 
+regcomp <- ggplot(comp2, aes(x=date, y=mobility, size=mobility, color=mobility)) + 
+  geom_point(alpha=0.1) + 
+  scale_size(range=c(.1,24), name="Mobility") + 
+  scale_x_date(date_breaks ='3 month') +
+  ylab("Mobility") + 
+  xlab("Time in months") +
+  theme(axis.text.x = element_text(angle=45, hjust=1)) + 
+  ggtitle("Comparison of walking data between Low-, Middle- & High-Mobility regions") + 
+  facet_wrap(~region)
+
+regcomp
+```
+The comparative plot highlights important differences between the regions of interest. Based on figure 14, we may establish that the difference between the high-, mid- and low-mobility regions is big enough that the client may consider taking different actions in the different regions.
+
+# Discussion
+
+In section 5, total mobility was examined in the Netherlands and its constituent regions. Several key insights were derived from this:
+1. Large cities suffered heavy losses in the use of public transport. This is therefore an unreliable area for the client to focus on. It is advisable to focus on consumers who drive, as this statistic remained stable despite the two lockdowns.
+2. Provinces which do not have large cities did not have public transit data. This indicates that consumers preferring walking in that region may be reached most easily.
+3. Regions that show stability despite the two lockdowns may be more receptive to varied products and advertisements. It may also be of interest to focus on walking preferring consumers in the Overijssel region, as walking appears to be strongly favored there.
+
+Market segmentation by region is likely to aid in the optimization of product release; the client does not need to waste resources on targeting less receptive consumers.
+It is also essential to note some important cons of this analysis:
+- The dataset had no information on bicycling. Cycling is an important commuting method in the Netherlands. In 2016, 27% of all mobility was attributed to bicycling. Analysis including this data may look different than this report[4].
+- This analysis also did not consider the effect of the weather on mobility. Due to a lack of pre-pandemic data, it was not clear how divergent the trends were from normal.
+
+# Conclusions
+
+This analysis may be combined with regional knowledge to optimize the introduction of products in the Netherlands. For example, for the client wishing to introduce new products in the sports market, the stability of the driving trend in Amsterdam may be of interest. Consumers who have invested in a car are less likely to also buy a skateboard or similar exercise-related transport method. Therefore, it may be ideal to focus on at-home workout equipment in this region. On the other hand, the Overijssel region, which strongly favors walking, may be a ripe market for fitness trackers, walking shoes or athleisure clothing lines.
+
+The COVID-19 pandemic has shown that flexible businesses are more likely to succeed. Leveraging available data to this end, then, is a wise decision for a company wishing to optimize business in a specific region.
+
+# Literature
+
+1. COVID-19 Mobility Trends Report. https://COVID19.apple.com/mobility. Accessed 25 June, 2021.
+2. COVID-19: Additional measures in schools, the hospitality sector and sport. https://www.government.nl/latest/news/2020/03/15/additionalmeasures-in-schools-the-hospitality-sector-and-sport. Accessed 28 June, 2021.
+3. Partial lockdown needed to bring down infections. https://www.government.nl/latest/news/2020/10/13/partial-lockdown-needed-to-bring-down-infections. Accessed 28 June, 2021.
+4. Cycling Facts 2018. https://www.government.nl/documents/reports/2018/04/01/cycling-facts-2018. Accessed 05 July, 2021.
+
+# Appendix
+
+1. Google Trends images
+  a. Comparison of terms ‘healthy recipes’, ‘fitbit’, and ‘home workout’. Data source: Google Trends (https://www.google.com/trends). Accessed 02 July 2021. 
+
+![Comparison: 'healthy recipes', 'fitbit' and 'home workout'](GT1.png)
+
+  b. Comparison of terms ‘healthy recipes’, ‘keto’, and ‘calorie’. Data source: Google Trends (https://www.google.com/trends). Accessed 02 July 2021. 
+  
+![Comparison: 'healthy recipes', 'keto' and 'calorie'](GT2.png)
